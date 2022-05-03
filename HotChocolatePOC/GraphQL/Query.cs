@@ -26,6 +26,7 @@ namespace HotChocolatePOC.GraphQL.Query
             }
             catch (Exception ex)
             {
+                //handle exception however you need to
                 return null;
             }
         }

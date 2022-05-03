@@ -40,9 +40,18 @@ namespace HotChocolatePOC.Data.Services
         {
             try
             {
-                dynamic queryResult = await _sqlConnectionService.QuerySingleAsync<dynamic>(template.RawSql, template.Parameters);
+                dynamic queryResult = await _sqlConnectionService.QueryAsync<dynamic>(template.RawSql, template.Parameters);
 
-                return MapResult(queryResult, template.TopLevelEntity) as Entity;
+                IEnumerable<Entity> mappedResult = MapResult(queryResult, template.TopLevelEntity, true) as IEnumerable<Entity>;
+
+                Entity result = mappedResult.FirstOrDefault();
+
+                if (result == null)
+                {
+                    return null;
+                }
+
+                return result;
             }
             catch (Exception ex)
             {

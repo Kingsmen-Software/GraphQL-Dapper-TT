@@ -14,10 +14,8 @@ namespace HotChocolatePOC.Data.Services
         private readonly IDomainReflectionService _domainReflectionService;
 
         private const string _schemaName = "dbo";
-        private List<string> _includeInAllSelects = new List<string>();
 
         private string _fromTable = string.Empty;
-        private string _selectAliasName = string.Empty;
 
         private SqlBuilder _query = new SqlBuilder();
         private DynamicParameters _dynamicParameters = new DynamicParameters();
@@ -31,11 +29,6 @@ namespace HotChocolatePOC.Data.Services
         {
             try
             {
-                foreach (var selection in selectionSet.Selections.Where(x => x.Kind == SyntaxKind.Field && (x as FieldNode).SelectionSet == null))
-                {
-                    _includeInAllSelects.Add((selection as FieldNode).Name.Value);
-                }
-
                 BuildQuery(selectionSet);
 
                 return GetSqlBuilderTemplate();
@@ -50,11 +43,6 @@ namespace HotChocolatePOC.Data.Services
         {
             try
             {
-                foreach (var selection in selectionSet.Selections.Where(x => x.Kind == SyntaxKind.Field && (x as FieldNode).SelectionSet == null))
-                {
-                    _includeInAllSelects.Add((selection as FieldNode).Name.Value);
-                }
-
                 BuildQuery(selectionSet);
 
                 CreateWhere(_fromTable, "id", "id", id);
@@ -82,7 +70,6 @@ namespace HotChocolatePOC.Data.Services
                     if (string.IsNullOrEmpty(_fromTable))
                     {
                         _fromTable = selectionCast?.TypeCondition.Name.Value;
-                        selectColumns.AddRange(_includeInAllSelects);
 
                         //Get the fragment unique select columns
                         foreach (ISelectionNode item in selectionCast.SelectionSet.Selections.Where(x => (x as FieldNode).SelectionSet == null))
@@ -93,6 +80,7 @@ namespace HotChocolatePOC.Data.Services
                             }
                         }
 
+                        selectColumns.Add("id");
                         CreateSelect(selectColumns, _fromTable);
                     }
 
@@ -104,8 +92,8 @@ namespace HotChocolatePOC.Data.Services
 
                         //Need to set the base alias for the nested join
                         //Each recursion of BuildJoinQuery will append to this
-                        _selectAliasName = $"{itemCast.Name.Value}_";
-                        BuildJoinQuery(item as FieldNode, _fromTable);
+                        var aliasName = $"{itemCast.Name.Value}_";
+                        BuildJoinQuery(item as FieldNode, _fromTable, selectPrefix: aliasName);
                     }
                 }
             }
@@ -113,7 +101,7 @@ namespace HotChocolatePOC.Data.Services
             return true;
         }
 
-        private bool BuildJoinQuery(FieldNode? fieldNode, string parentEntity, JoinType joinType = JoinType.Inner)
+        private bool BuildJoinQuery(FieldNode? fieldNode, string parentEntity, string selectPrefix, JoinType joinType = JoinType.Inner)
         {
             if (fieldNode == null)
             {
@@ -122,7 +110,6 @@ namespace HotChocolatePOC.Data.Services
             }
 
             List<string> selectColumns = new List<string>();
-            selectColumns.AddRange(_includeInAllSelects);
 
             //fieldNode.Name.Value is the name of the join object on the entity.
             //This does not have to be 1 to 1 with the DB table
@@ -138,7 +125,8 @@ namespace HotChocolatePOC.Data.Services
                 selectColumns.Add((selection as FieldNode).Name.Value);
             }
 
-            CreateSelect(selectColumns, joinInfo.TopLevelEntity);
+            selectColumns.Add("id");
+            CreateSelect(selectColumns, joinInfo.TopLevelEntity, selectPrefix);
 
             //If we have further joins we use recursion to continue to populate
             foreach (ISelectionNode selection in fieldNode.SelectionSet.Selections.Where(x => (x as FieldNode).SelectionSet != null))
@@ -146,20 +134,22 @@ namespace HotChocolatePOC.Data.Services
                 FieldNode selectionCast = selection as FieldNode;
 
                 //Need to add onto the select alias name for each instance of recurison so we can map the columns returned back to a nested POCO
-                _selectAliasName += $"{selectionCast.Name.Value}_";
+                var newPrefix = selectPrefix + $"{selectionCast.Name.Value}_";
 
-                BuildJoinQuery(selectionCast, joinInfo.TopLevelEntity, joinInfo.JoinType);
+                BuildJoinQuery(selectionCast, joinInfo.TopLevelEntity, newPrefix, joinInfo.JoinType);
             }
 
             return true;
         }
 
-        private void CreateSelect(List<string> fieldsToAdd, string tableName)
+        private void CreateSelect(List<string> fieldsToAdd, string tableName, string? tablePrefix = null)
         {
+            var typeProps = _domainReflectionService.GetType(tableName).GetProperties().Select(t => t.Name.ToLower());
+
             //slapper automapper requires underscore notation for select alias in order to map correctly to nest entities
-            foreach (string field in fieldsToAdd)
+            foreach (string field in fieldsToAdd.Distinct().Where(f => typeProps.Contains(f.ToLower())))
             {
-                _query.Select($"[{tableName}].[{field}] AS {_selectAliasName}{field}");
+                _query.Select($"[{tableName}].[{field}] AS [{tablePrefix ?? string.Empty}{field}]");
             }
         }
 
@@ -187,12 +177,11 @@ namespace HotChocolatePOC.Data.Services
         {
             Template template = _query.AddTemplate($"SELECT /**select**/ FROM [{_schemaName}].[{_fromTable}] /**innerjoin**/ /**leftjoin**/ /**where**/ ");
 
-            return new QueryTemplate
-            {
-                RawSql = template.RawSql,
-                Parameters = _dynamicParameters,
-                TopLevelEntity = _fromTable
-            };
+            return new QueryTemplate(
+                template.RawSql,
+                _dynamicParameters,
+                _fromTable
+            );
         }
     }
 }

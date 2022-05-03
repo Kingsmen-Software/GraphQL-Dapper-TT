@@ -15,5 +15,8 @@ namespace HotChocolatePOC.Domain.Entities
         public Guid? RoleAction_Id { get; set; }
         [ForeignKey("RoleAction_Id")]
         public RoleAction? RoleAction { get; set; }
+
+        //Slapper Automapper needs a parameterless constructor
+        public UserRole() { }
     }
 }

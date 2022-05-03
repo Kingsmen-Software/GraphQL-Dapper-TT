@@ -1,4 +1,6 @@
-﻿using HotChocolatePOC.Data.Classes;
+﻿using System.Reflection;
+
+using HotChocolatePOC.Data.Classes;
 
 namespace HotChocolatePOC.Data.Interfaces
 {
@@ -6,5 +8,6 @@ namespace HotChocolatePOC.Data.Interfaces
     {
         Type GetType(string entityName);
         TableJoin GetTableNameAndForeignKeyForJoin(string parentEntity, string entityName, JoinType joinType);
+        List<PropertyInfo> GetTypePropertiesWithoutKey(Type type);
     }
 }

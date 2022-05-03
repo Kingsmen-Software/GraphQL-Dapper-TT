@@ -6,5 +6,8 @@ namespace HotChocolatePOC.Domain.Entities
     {
         public bool? CanRead { get; set; }
         public bool? CanWrite { get; set; }
+
+        //Slapper Automapper needs a parameterless constructor
+        public RoleAction() { }
     }
 }
